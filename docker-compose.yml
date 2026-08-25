@@ -55,13 +55,16 @@ services:
       STORAGE_LOCAL_DRIVER: local
       STORAGE_LOCAL_ROOT: /directus/uploads
     volumes:
-      - ./directus/uploads:/directus/uploads
+      # A named volume, not a bind mount: the container runs as uid 1000 while a
+      # host directory is owned by the developer's uid, and Directus writes a
+      # probe file here on every health check.
+      - directus_uploads:/directus/uploads
       - ./directus/extensions:/directus/extensions
-      # Mounted as a directory (not a single file) so the stack starts even
-      # before snapshot.yaml has been generated:
-      #   docker compose exec directus npx directus schema apply --yes \
-      #     /directus/schema/snapshot.yaml
-      - ./directus:/directus/schema
+      # Read-only, and mounted as a directory rather than a single file so the
+      # stack starts before snapshot.yaml exists. `schema apply` reads from
+      # here; `schema snapshot` writes to the host's stdout instead, which
+      # sidesteps the uid mismatch entirely.
+      - ./directus:/directus/schema:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,3 +77,4 @@ services:
 
 volumes:
   pgdata:
+  directus_uploads:

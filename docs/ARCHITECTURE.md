@@ -83,9 +83,13 @@ in one module (`src/lib/pricing.ts`) that everything else calls:
   be reasonably inferred — the only case that yields "no price" is a product
   with no tiers at all, which the UI renders as *contact for a quote* rather
   than as `0`.
-- **Money is rounded at every boundary**, through `roundMoney`, with an epsilon
-  nudge so that values exact in decimal but not in binary (`1.005`) round the
-  way an accountant expects.
+- **Money is rounded at every boundary**, through `roundMoney`. Scaling by 100
+  leaves values that are exact in decimal but not in binary just *below* the
+  halfway point (`8.165 * 100` is `816.4999999999999`), so a plain `Math.round`
+  rounds them down and the shop quietly undercharges. Trimming to 15 significant
+  digits first removes the representation error. A `Number.EPSILON` correction
+  is not enough — EPSILON is scaled to 1.0 and is already an order of magnitude
+  too small at 8 zł.
 - **VAT is computed once on the rounded net subtotal**, not per line. That is
   what a Polish invoice does, and it avoids the grosz of drift that per-line VAT
   accumulates across a large order.
@@ -94,6 +98,30 @@ in one module (`src/lib/pricing.ts`) that everything else calls:
 ids and quantities; `POST /api/orders` re-reads the tiers from Directus and
 recomputes every line server-side. A tampered `localStorage` cart changes what
 the buyer sees and nothing else.
+
+## Reading from Directus
+
+`src/lib/api.ts` is the only module that talks to the catalogue, and it exists
+for a specific reason beyond tidiness: **PostgreSQL returns `numeric` columns as
+strings**. A price arrives as `"346.50"`, not `346.5`, because the driver will
+not risk precision loss through a float.
+
+That is a quiet failure mode. String arithmetic coerces and appears to work, so
+totals look right in a smoke test — but `Number.isFinite("346.50")` is `false`,
+which means every formatted price renders as `0,00 zł`. Everything crossing this
+boundary is therefore normalised once, in `normalizeProduct` /
+`normalizeCategory`, and the domain layer only ever sees real numbers.
+`tests/api.test.ts` pins this against the exact shape the API returns.
+
+Two further details worth knowing about the SDK:
+
+- `fields` takes relations as a **single** nested object. The SDK infers the
+  shape of the whole array from its first object entry, so
+  `['*', { category }, { price_tiers }]` fails to typecheck while
+  `['*', { category, price_tiers }]` succeeds.
+- Sorting by price is deliberately *not* pushed to the database. The displayed
+  price depends on the buyer's quantity, so "cheapest first" is not a property
+  of a row that SQL can order by; price sorts are applied after tier resolution.
 
 ## Cart
 
@@ -179,3 +207,20 @@ Vitest runs them in a plain Node environment with `@` aliased to
   secrets; `CORS_ORIGIN` must be the deployed storefront origin.
 - The schema is reproduced from `directus/snapshot.yaml`, not by clicking
   through the admin panel.
+
+## Two operational traps
+
+Both of these were found by running the documented setup from scratch, and both
+fail in ways that look like something else:
+
+1. **`schema apply` needs a restart.** The CLI writes the new collections
+   straight to the database while the running server keeps its own copy of the
+   schema in memory. Until it restarts, every request to a new collection
+   answers `403 ... or it does not exist` — *including requests from an
+   administrator*, which sends you hunting for a permissions bug that is not
+   there. `POST /utils/cache/clear` does not fix it; this is process memory, not
+   the cache store. `npm run schema:apply` therefore restarts the container.
+2. **`docker compose exec` truncates piped stdout at 64 KiB.** Redirecting a
+   snapshot straight to a host file cuts it mid-token and produces YAML that
+   fails to parse on the next apply. `npm run schema:snapshot` writes inside the
+   container and copies the file out with `docker compose cp` instead.

@@ -17,11 +17,26 @@ export const THOUSANDS_SEPARATOR = ' ';
 export const DECIMAL_SEPARATOR = ',';
 
 /**
- * Rounds to whole grosze. The epsilon nudge keeps values that are exact in
- * decimal but not in binary (0.145, 1.005) from rounding down.
+ * Rounds to whole grosze, half away from zero.
+ *
+ * The `toPrecision(15)` step is doing real work. Scaling by 100 leaves values
+ * that are exact in decimal but not in binary just below the halfway point —
+ * `8.165 * 100` is `816.4999999999999` — so a plain `Math.round` rounds them
+ * down and the shop quietly undercharges. Trimming to 15 significant digits
+ * discards the representation error while keeping every digit that matters for
+ * money. A `Number.EPSILON` correction does not work here: EPSILON is scaled to
+ * 1.0, so it is already an order of magnitude too small at 8 zł.
+ *
+ * `Math.round` breaks ties toward +∞, which would turn -0.005 into -0.00;
+ * taking the sign out first keeps credits symmetric with charges.
  */
 export function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  if (!Number.isFinite(value)) return 0;
+
+  const scaled = Number((Math.abs(value) * 100).toPrecision(15));
+  const rounded = Math.round(scaled) / 100;
+
+  return value < 0 ? -rounded : rounded;
 }
 
 /** `1732.5` → `"1 732,50"`. Negative values keep a leading minus. */

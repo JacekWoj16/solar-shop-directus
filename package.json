@@ -10,7 +10,8 @@
     "node": ">=22"
   },
   "workspaces": [
-    "storefront"
+    "storefront",
+    "directus/seed"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @solar-shop/storefront",
@@ -21,11 +22,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "seed": "npm run seed --workspace @solar-shop/seed",
     "directus:up": "docker compose up -d",
     "directus:down": "docker compose down",
     "directus:logs": "docker compose logs -f directus",
-    "schema:apply": "docker compose exec directus npx directus schema apply --yes /directus/schema/snapshot.yaml",
-    "schema:snapshot": "docker compose exec directus npx directus schema snapshot --yes /directus/schema/snapshot.yaml"
+    "schema:apply": "docker compose exec -T directus npx directus schema apply --yes /directus/schema/snapshot.yaml && docker compose restart directus",
+    "schema:snapshot": "docker compose exec -T directus npx directus schema snapshot --yes --format=yaml /tmp/snapshot.yaml && docker compose cp directus:/tmp/snapshot.yaml directus/snapshot.yaml"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

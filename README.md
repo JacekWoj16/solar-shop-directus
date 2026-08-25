@@ -76,29 +76,39 @@ npm install
 
 # 1. Start Directus + PostgreSQL (first run takes ~30s to bootstrap)
 docker compose up -d
-docker compose logs -f directus     # wait for "Server started at ..."
 
-# 2. Apply the committed schema
+# 2. Apply the committed schema (restarts Directus so it picks the new
+#    collections up — see docs/ARCHITECTURE.md for why that is required)
 npm run schema:apply
 
-# 3. Seed categories, products, price tiers and sample orders
+# 3. Seed the catalogue, configure public read access and issue the
+#    storefront's order-intake token. Also writes storefront/.env.local.
 npm run seed
 
-# 4. Configure the storefront
-cp .env.example storefront/.env.local   # then fill in DIRECTUS_STATIC_TOKEN
-
-# 5. Run it
+# 4. Run it
 npm run dev
 ```
+
+That gives you 7 categories, 74 products with 219 price brackets, 3 editorial
+pages and 5 sample orders across the status flow.
 
 | Service | URL | Credentials |
 |---|---|---|
 | Storefront | http://localhost:3000 | — |
 | Directus admin | http://localhost:8055 | `admin@example.com` / `admin123` |
 
-The static token for step 4 is created in Directus under
-**User Directory → admin → Token**. It is server-only and grants order creation;
-the storefront reads the catalogue anonymously.
+`npm run seed` also sets up access, because roles and permissions are *data* in
+Directus rather than schema and `schema apply` does not carry them: it grants
+the public role read-only access to the catalogue, then creates a dedicated
+`Storefront` machine account whose static token may create orders but cannot
+touch the price list. That token is written to `storefront/.env.local` (never
+committed, never exposed to the browser).
+
+To reseed a populated instance, pass `--reset`:
+
+```bash
+npm run seed -- --reset
+```
 
 ## Scripts
 
@@ -110,7 +120,8 @@ the storefront reads the catalogue anonymously.
 | `npm run typecheck` | TypeScript across the repo |
 | `npm run lint` | ESLint |
 | `npm run directus:up` / `:down` / `:logs` | Docker stack |
-| `npm run schema:apply` | Apply `directus/snapshot.yaml` to the running instance |
+| `npm run seed` | Populate the catalogue and configure access (`-- --reset` to replace existing data) |
+| `npm run schema:apply` | Apply `directus/snapshot.yaml`, then restart Directus |
 | `npm run schema:snapshot` | Write the live schema back to `directus/snapshot.yaml` |
 
 ## Tests
@@ -143,7 +154,8 @@ category min/step, and the Polish NIP modulo-11 checksum.
 Built in stages; this section tracks where it is.
 
 - [x] Architecture, tooling, design tokens, domain layer with tests
-- [ ] Directus schema snapshot and seed data
+- [x] Directus schema snapshot, seed data and access configuration
+- [x] Typed catalogue API with tier-aware queries
 - [ ] Product table with tiered pricing and quantity rules
 - [ ] Category pages, filtering, sorting, pagination
 - [ ] Search

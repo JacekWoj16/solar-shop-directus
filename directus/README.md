@@ -32,9 +32,21 @@ npm run schema:apply
 npm run schema:snapshot
 ```
 
-Both scripts run inside the container, where `./directus` is mounted at
-`/directus/schema`. Review the diff from `schema:snapshot` before committing:
-it is a schema migration and deserves the same scrutiny as one.
+`schema:apply` reads the snapshot through the read-only `/directus/schema`
+mount and then **restarts the container**, which is not optional. The CLI runs
+as a separate process and writes the new collections straight to the database,
+while the running server keeps its own schema in memory — so until it restarts
+every request to a newly created collection answers `403 ... or it does not
+exist`, including requests from an administrator. `POST /utils/cache/clear`
+does not help: this is process memory, not the cache store. `schema:snapshot` takes the longer route — writing inside the container
+and copying the file out with `docker compose cp` — for two reasons: the
+container runs as uid 1000 and cannot write to a host directory owned by the
+developer, and **`docker compose exec` truncates a piped stdout at 64 KiB**,
+which silently cuts the snapshot mid-token and produces a YAML file that fails
+to parse on the next `apply`.
+
+Review the diff from `schema:snapshot` before committing: it is a schema
+migration and deserves the same scrutiny as one.
 
 ## Access model
 

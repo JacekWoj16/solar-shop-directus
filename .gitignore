@@ -29,7 +29,7 @@ dist/
 !.env.example
 
 # --- Directus runtime data ---
-directus/uploads/
+# Uploads live in a named docker volume, not here.
 directus/database/
 directus/extensions/*
 !directus/extensions/.gitkeep

@@ -1,0 +1,13 @@
+{
+  "name": "@solar-shop/seed",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Populates a schema-applied Directus instance with catalogue data and storefront access",
+  "scripts": {
+    "seed": "node seed-data.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.0"
+  }
+}
