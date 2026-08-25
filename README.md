@@ -1,0 +1,163 @@
+# Headless Solar Shop
+
+A B2B e-commerce store for photovoltaic equipment, built as a headless
+architecture: **Directus 11** as the CMS and product database, **Next.js 16** as
+the storefront.
+
+It is a clean rebuild of a real WooCommerce shop I previously worked on — the
+kind that grew into a dozen plugins stitched together to express one idea:
+*installers buy by the pallet, and the price depends on how many pallets.*
+
+## What makes it not a generic shop
+
+**Product tables, not product grids.** The core UI is a dense table with an
+inline quantity field on every row. A buyer ordering forty pallets wants forty
+rows on screen, not forty cards to scroll past. This is a procurement tool, not
+a consumer storefront.
+
+**Volume pricing that responds as you type.** Every product carries quantity
+brackets (1–4, 5–99, 100–499, 500+). The unit price updates live in the table
+and the cart, and when a buyer is a few units short of a cheaper bracket the
+cart says so: *"Add 2 more and pay 5% less per unit."*
+
+**Quantity rules per category.** Panels ship on pallets of five, so the minimum
+is 5 and the step is 1. Cables are sold on 10-metre rolls. The rules live on the
+category and are enforced in the input, in the cart store and again in the order
+route.
+
+**Proforma invoices instead of a payment gateway.** The only payment method is a
+manual bank transfer. Placing an order generates a proforma PDF with the bank
+details, a payment reference and a seven-day deadline; the shop owner confirms
+the transfer in Directus and ships.
+
+**A versioned schema.** `directus/snapshot.yaml` is the data model. Clone,
+`docker compose up`, apply the snapshot, and you have the same collections,
+fields and relations — not a wiki page describing what to click.
+
+## Screenshots
+
+<!-- Added as the storefront surfaces are built: home, category table with the
+     tier tooltip open, search, cart with the nudge, checkout, proforma PDF. -->
+
+_Coming as the storefront is built out._
+
+## Tech stack
+
+| Choice | Why |
+|---|---|
+| **Directus 11** | Database-first headless CMS: it derives REST and GraphQL from the SQL schema, which suits deeply relational product data (a product owns its price brackets) better than a document CMS. The admin panel manages products, tiers and orders out of the box. Third headless CMS in my portfolio, after Strapi and Payload. |
+| **Next.js 16, App Router** | Server components for the catalogue, client components only where interaction demands it, and a rendering strategy per route — see below. |
+| **ISR** | A B2B catalogue changes slowly: prices weekly, stock daily. Static generation with periodic revalidation gives static performance while keeping the CMS out of the request path. Search stays dynamic; the cart never touches the server. |
+| **Zustand + localStorage** | Orders are placed without registration, so a server cart would add a session store, a merge strategy and a cleanup job while buying nothing. |
+| **Tailwind CSS v4** | Design tokens declared once in CSS under `@theme`, named semantically. A palette change is a one-file edit. |
+| **@react-pdf/renderer** | Proforma generation in a route handler, with the layout expressed as components rather than imperative drawing calls. |
+| **PostgreSQL 16** | Directus manages its own schema; Postgres handles the relational load. |
+
+### Rendering strategy
+
+| Route | Strategy |
+|---|---|
+| `/` | ISR, 1 hour |
+| `/products/[category]` | ISR, 30 minutes, pre-rendered per category |
+| `/search` | Dynamic — the query space is unbounded |
+| `/cart`, `/checkout` | Client-side, `localStorage` |
+| `/order/[orderId]` | Dynamic, uncached |
+
+Full reasoning in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Getting started
+
+**Prerequisites:** Node.js 22+, Docker with Compose.
+
+```bash
+git clone https://github.com/JacekWoj16/solar-shop-directus.git
+cd solar-shop-directus
+npm install
+
+# 1. Start Directus + PostgreSQL (first run takes ~30s to bootstrap)
+docker compose up -d
+docker compose logs -f directus     # wait for "Server started at ..."
+
+# 2. Apply the committed schema
+npm run schema:apply
+
+# 3. Seed categories, products, price tiers and sample orders
+npm run seed
+
+# 4. Configure the storefront
+cp .env.example storefront/.env.local   # then fill in DIRECTUS_STATIC_TOKEN
+
+# 5. Run it
+npm run dev
+```
+
+| Service | URL | Credentials |
+|---|---|---|
+| Storefront | http://localhost:3000 | — |
+| Directus admin | http://localhost:8055 | `admin@example.com` / `admin123` |
+
+The static token for step 4 is created in Directus under
+**User Directory → admin → Token**. It is server-only and grants order creation;
+the storefront reads the catalogue anonymously.
+
+## Scripts
+
+| Command | Does |
+|---|---|
+| `npm run dev` | Storefront in development mode |
+| `npm run build` | Production build |
+| `npm test` | Domain test suite (Vitest) |
+| `npm run typecheck` | TypeScript across the repo |
+| `npm run lint` | ESLint |
+| `npm run directus:up` / `:down` / `:logs` | Docker stack |
+| `npm run schema:apply` | Apply `directus/snapshot.yaml` to the running instance |
+| `npm run schema:snapshot` | Write the live schema back to `directus/snapshot.yaml` |
+
+## Tests
+
+```bash
+npm test
+```
+
+The suite covers the domain layer, which is where the money is: tier resolution
+at bracket boundaries, unsorted and gapped tiers, products with no tiers,
+nudge thresholds, monetary rounding, VAT, quantity normalisation against
+category min/step, and the Polish NIP modulo-11 checksum.
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layers, rendering strategy,
+  pricing and cart design, security boundaries
+- [docs/data-model.md](docs/data-model.md) — collections, relations, permissions
+- [directus/README.md](directus/README.md) — schema workflow
+
+## Deployment
+
+- **Storefront** → Vercel, with Root Directory set to `storefront`.
+- **Directus** → self-hosted from `docker-compose.yml` behind a TLS reverse
+  proxy. Replace `SECRET`, `ADMIN_PASSWORD` and the database password with real
+  secrets, and point `CORS_ORIGIN` at the deployed storefront.
+
+## Project status
+
+Built in stages; this section tracks where it is.
+
+- [x] Architecture, tooling, design tokens, domain layer with tests
+- [ ] Directus schema snapshot and seed data
+- [ ] Product table with tiered pricing and quantity rules
+- [ ] Category pages, filtering, sorting, pagination
+- [ ] Search
+- [ ] Cart with tier nudges
+- [ ] Checkout, NIP validation, order creation
+- [ ] Proforma PDF generation
+- [ ] Screenshots
+
+## Notes
+
+The shop is fictional. Seller details, bank account and company data on the
+proforma are placeholders; product imagery is generated. Brand names in the seed
+data are real manufacturers, used to make the catalogue realistic.
+
+## License
+
+[MIT](LICENSE)

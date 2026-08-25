@@ -1,0 +1,35 @@
+{
+  "name": "solar-shop-directus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless B2B e-commerce store for photovoltaic equipment: Directus + Next.js",
+  "license": "MIT",
+  "author": "Jacek Wojarski",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "storefront"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @solar-shop/storefront",
+    "build": "npm run build --workspace @solar-shop/storefront",
+    "start": "npm run start --workspace @solar-shop/storefront",
+    "lint": "npm run lint --workspace @solar-shop/storefront",
+    "typecheck": "tsc --noEmit --project tsconfig.json && npm run typecheck --workspace @solar-shop/storefront",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "directus:up": "docker compose up -d",
+    "directus:down": "docker compose down",
+    "directus:logs": "docker compose logs -f directus",
+    "schema:apply": "docker compose exec directus npx directus schema apply --yes /directus/schema/snapshot.yaml",
+    "schema:snapshot": "docker compose exec directus npx directus schema snapshot --yes /directus/schema/snapshot.yaml"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  }
+}
