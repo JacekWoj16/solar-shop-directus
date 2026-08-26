@@ -43,11 +43,12 @@ services:
       CORS_ENABLED: "true"
       CORS_ORIGIN: ${DIRECTUS_CORS_ORIGIN:-http://localhost:3000}
 
-      # The storefront reads the catalogue anonymously; caching is handled by
-      # Next.js ISR, so Directus only needs a short internal cache.
-      CACHE_ENABLED: "true"
-      CACHE_STORE: memory
-      CACHE_TTL: 1m
+      # Directus caching is off on purpose. The storefront already caches at the
+      # query level (`use cache` in lib/api.ts), so a second cache here with its
+      # own TTL buys nothing and actively breaks writes: order numbers are
+      # derived from the highest number already issued, and a minute-stale read
+      # hands the same number to two orders.
+      CACHE_ENABLED: "false"
 
       # Product images live on an external CDN (image_url field), so uploads are
       # only used for generated proforma PDFs and editorial assets.

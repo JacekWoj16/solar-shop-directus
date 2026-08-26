@@ -110,9 +110,22 @@ in one module (`src/lib/pricing.ts`) that everything else calls:
   accumulates across a large order.
 
 **Prices shown to the buyer are never trusted.** The checkout sends only product
-ids and quantities; `POST /api/orders` re-reads the tiers from Directus and
-recomputes every line server-side. A tampered `localStorage` cart changes what
-the buyer sees and nothing else.
+ids and quantities; `POST /api/orders` re-reads the tiers from Directus —
+uncached, through `getProductsByIds` — and recomputes every line server-side. A
+tampered `localStorage` cart changes what the buyer sees and nothing that gets
+billed. Quantities are re-normalised against each category's rules for the same
+reason, and duplicate ids in one submission collapse into a single line rather
+than being written twice.
+
+`validateCheckout` runs in both places from one implementation: in the browser so
+a buyer hears about a mistyped NIP before submitting, and on the server because
+the browser copy can be skipped entirely. Sharing it is what stops a field the
+form accepts and the API rejects — a dead end no user can escape.
+
+Order numbers (`SO-2026-00001`) are derived from the highest number already
+issued that year, not from a count, which would reissue a number after any
+deletion and collide on the unique constraint. Two simultaneous orders can still
+pick the same one; the constraint catches that and the route retries.
 
 ## Reading from Directus
 
@@ -275,10 +288,10 @@ Vitest runs them in a plain Node environment with `@` aliased to
 - The schema is reproduced from `directus/snapshot.yaml`, not by clicking
   through the admin panel.
 
-## Two operational traps
+## Operational traps
 
-Both of these were found by running the documented setup from scratch, and both
-fail in ways that look like something else:
+Found by running things end to end rather than by reading the code. Each fails
+in a way that looks like something else:
 
 1. **`schema apply` needs a restart.** The CLI writes the new collections
    straight to the database while the running server keeps its own copy of the
@@ -287,7 +300,14 @@ fail in ways that look like something else:
    administrator*, which sends you hunting for a permissions bug that is not
    there. `POST /utils/cache/clear` does not fix it; this is process memory, not
    the cache store. `npm run schema:apply` therefore restarts the container.
-2. **`docker compose exec` truncates piped stdout at 64 KiB.** Redirecting a
+2. **A prerendered layout fixes the response status.** With a static shell, the
+   response has begun before a page can call `notFound()`, so `/order/[id]` with
+   an unknown id renders the 404 page but answers `200`. Moving the check into
+   `generateMetadata` does not help. The alternatives — dropping partial
+   prerendering storefront-wide, or a middleware database lookup on every
+   request to the path — both cost more than the defect does on a `noindex` page
+   reached from an emailed link. Recorded here rather than papered over.
+3. **`docker compose exec` truncates piped stdout at 64 KiB.** Redirecting a
    snapshot straight to a host file cuts it mid-token and produces YAML that
    fails to parse on the next apply. `npm run schema:snapshot` writes inside the
    container and copies the file out with `docker compose cp` instead.

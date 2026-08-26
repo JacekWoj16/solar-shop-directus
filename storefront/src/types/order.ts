@@ -84,22 +84,27 @@ export interface Order {
   items: OrderItem[];
 }
 
-/** What the checkout form sends to `POST /api/orders`. */
-export interface CreateOrderPayload {
-  invoiceType: InvoiceType;
-  company: CompanyDetails | null;
-  delivery: DeliveryAddress;
-  notes: string | null;
-  /**
-   * Only product ids and quantities: unit prices are recomputed server-side
-   * from Directus so a tampered cart cannot set its own prices.
-   */
-  items: Array<{ productId: string; quantity: number }>;
-  consent: boolean;
+/** A line as submitted by the browser. */
+export interface OrderLineInput {
+  productId: string;
+  quantity: number;
 }
 
+/**
+ * What the checkout form sends to `POST /api/orders`: the raw form fields
+ * (see `CheckoutInput`) plus product ids and quantities.
+ *
+ * Note what is *not* here: prices. They are recomputed server-side from
+ * Directus, so a tampered cart changes what the buyer sees and nothing else.
+ */
 export interface CreateOrderResult {
   orderNumber: string;
   orderId: string;
   totalGross: number;
+}
+
+/** Field-level errors returned to the form when a submission is rejected. */
+export interface CreateOrderError {
+  message: string;
+  fields?: Record<string, string>;
 }

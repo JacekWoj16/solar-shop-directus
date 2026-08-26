@@ -30,6 +30,11 @@ is 5 and the step is 1. Cables are sold on 10-metre rolls. The rules live on the
 category and are enforced in the input, in the cart store and again in the order
 route.
 
+**Prices are never taken from the browser.** The checkout submits product ids
+and quantities; the server re-reads the tiers from Directus and recomputes every
+line. A cart edited in devtools changes what that buyer sees and nothing that
+gets billed.
+
 **Proforma invoices instead of a payment gateway.** The only payment method is a
 manual bank transfer. Placing an order generates a proforma PDF with the bank
 details, a payment reference and a seven-day deadline; the shop owner confirms
@@ -66,7 +71,8 @@ _Coming as the storefront is built out._
 | `/products/[category]` | Static shell prerendered per category; the table streams in, 30 minutes |
 | `/search` | Dynamic — the query space is unbounded |
 | `/cart` | Prerendered shell with a client island; cart state in `localStorage` |
-| `/checkout` | Client-side, `localStorage` |
+| `/checkout` | Prerendered shell with a client island; cart state in `localStorage` |
+| `/order/[id]` | Blocking, uncached |
 | `/order/[orderId]` | Dynamic, uncached |
 
 Caching is declared on the queries themselves rather than on route segments:

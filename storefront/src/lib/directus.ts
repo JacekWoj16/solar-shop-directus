@@ -24,6 +24,9 @@ import type { Category, PriceTier, Product } from '@/types/product';
  * expressed as foreign keys. Application code works with the expanded types in
  * `@/types/*` after a `fields` query has resolved the relations.
  */
+/** An order line as the collection stores it, with its parent key. */
+type DirectusOrderItem = OrderItem & { order: string };
+
 export interface DirectusSchema {
   categories: Category[];
   products: Array<Omit<Product, 'category' | 'price_tiers'> & {
@@ -31,8 +34,12 @@ export interface DirectusSchema {
     price_tiers: Array<string | PriceTier>;
   }>;
   price_tiers: Array<PriceTier & { product: string | Product }>;
-  orders: Array<Omit<Order, 'items'> & { items: Array<string | OrderItem> }>;
-  order_items: Array<OrderItem & { order: string }>;
+  // `items` holds the related records rather than `string | OrderItem`: the SDK
+  // resolves a nested `fields` selection by matching the property's element
+  // type against a collection, which a union with `string` defeats. Every query
+  // here expands the relation anyway.
+  orders: Array<Omit<Order, 'items'> & { items: DirectusOrderItem[] }>;
+  order_items: DirectusOrderItem[];
   pages: Page[];
 }
 
