@@ -545,6 +545,26 @@ export async function getProductsByIds(ids: string[]): Promise<Product[]> {
   return (data as Record<string, unknown>[]).map(normalizeProduct);
 }
 
+/** Slugs of every published page, for prerendering the editorial routes. */
+export async function getPageSlugs(): Promise<string[]> {
+  'use cache';
+  cacheLife('structure');
+  cacheTag('pages');
+
+  const data = await directusClient().request(
+    readItems('pages', {
+      fields: ['slug'],
+      filter: { status: { _eq: 'published' } },
+      sort: ['slug'],
+      limit: -1,
+    }),
+  );
+
+  return (data as Array<{ slug?: string }>)
+    .map((row) => row.slug)
+    .filter((slug): slug is string => Boolean(slug));
+}
+
 export async function getPage(slug: string): Promise<Page | null> {
   'use cache';
   cacheLife('structure');

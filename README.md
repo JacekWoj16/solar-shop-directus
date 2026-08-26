@@ -73,6 +73,7 @@ _Coming as the storefront is built out._
 | `/cart` | Prerendered shell with a client island; cart state in `localStorage` |
 | `/checkout` | Prerendered shell with a client island; cart state in `localStorage` |
 | `/order/[id]` | Blocking, uncached |
+| `/about`, `/contact`, `/terms` | Prerendered from CMS content, 1 hour |
 | `/order/[orderId]` | Dynamic, uncached |
 
 Caching is declared on the queries themselves rather than on route segments:

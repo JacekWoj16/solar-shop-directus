@@ -151,6 +151,33 @@ Two further details worth knowing about the SDK:
   price depends on the buyer's quantity, so "cheapest first" is not a property
   of a row that SQL can order by; price sorts are applied after tier resolution.
 
+## Editorial pages
+
+`/about`, `/contact` and `/terms` are one route, `app/[slug]`, not three
+near-identical files: the difference between them is entirely content, and the
+content lives in Directus. Adding a fourth page is a CMS action rather than a
+deploy.
+
+Every published page is prerendered from `generateStaticParams`, and dynamic
+params stay enabled so a page published after the build renders on first request
+instead of 404ing until someone redeploys — which is the point of putting the
+copy in a CMS at all. The route sits at the root, so it also catches unmatched
+top-level paths; static segments like `/cart` and `/search` are matched first.
+
+The WYSIWYG output is rendered with `dangerouslySetInnerHTML`. That rests on a
+specific fact rather than optimism: the Directus admin is reachable only by the
+shop owner, and the public role has read access and nothing more. Widening
+editorial access to people who are not fully trusted makes sanitising this a
+prerequisite, not an improvement.
+
+Styling lives in `.cms-content` in `globals.css` rather than a typography
+plugin, so CMS copy renders inside the same design tokens as everything else and
+an editor cannot introduce a look the shop does not have.
+
+Worth noting against the `/order/[id]` limitation above: this route *does*
+return a real 404 for an unknown slug. Having `generateStaticParams` is what
+makes the difference.
+
 ## Search
 
 The only catalogue surface never prerendered, and structurally so: the query
