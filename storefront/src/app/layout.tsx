@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 
+import { Footer } from '@/components/layout/Footer';
+import { Header } from '@/components/layout/Header';
 import '@/styles/globals.css';
 
 /**
@@ -50,13 +52,13 @@ export default function RootLayout({
           Skip to content
         </a>
 
-        {/* Header lands here once the category menu has data to render. */}
+        <Header />
 
         <main id="main" className="flex-1">
           {children}
         </main>
 
-        {/* Footer follows the header. */}
+        <Footer />
       </body>
     </html>
   );
