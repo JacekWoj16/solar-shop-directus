@@ -189,6 +189,36 @@ which means fetching the filtered set and paginating in memory. Every filter SQL
 thousands of SKUs per category this would want a denormalised `entry_price`
 column maintained by a Directus flow, so both could go back into the database.
 
+## Proforma invoices
+
+Generated on request in a route handler rather than stored. The document is a
+pure function of the order, so a saved copy would only be a file to keep in sync
+with a record that can still be corrected in the Directus admin. `proforma_path`
+on `orders` therefore stays null — the column is there for a deployment that
+wants to archive issued documents for accounting.
+
+**Fonts are embedded, and this is not optional.** The PDF built-in faces use
+WinAnsi encoding, which has no Polish diacritics, so a proforma addressed to a
+buyer in *Wrocław* would spell their city wrong on the document their accountant
+files. Liberation Sans (SIL OFL, metrically Arial-compatible) is committed under
+`src/assets/fonts` and registered at render time. Nothing imports those files, so
+Next's output tracing cannot infer the dependency: `outputFileTracingIncludes`
+declares it, or the route works locally and 500s once deployed.
+
+Two behaviours of @react-pdf/renderer 4.8.1 worth knowing:
+
+- **The `render` prop does nothing.** It is typed and documented for injecting
+  page counters into `<Text>`, but returns an empty node — confirmed by
+  rendering a constant string through it. Page chrome belongs in `Page`'s
+  `layout` prop, which is where v4 actually exposes `pageNumber` and
+  `totalPages`.
+- **A `fixed` container renders nothing**, while `fixed` leaf nodes repeat
+  correctly. This is moot once the footer moves into `layout`, but it is what
+  the first attempt tripped over.
+
+Unlike the confirmation page, this route *can* return a real 404: a route
+handler writes its own response, with no prerendered layout to flush first.
+
 ## Cart
 
 The cart is client-side only: Zustand with a `localStorage` persister, no server

@@ -98,7 +98,7 @@ and covered by `tests/pricing.test.ts`.
 | `vat_amount` | decimal(12,2) | 23% of `subtotal_net`, rounded once. |
 | `total_gross` | decimal(12,2) | |
 | `notes` | text, nullable | Buyer notes. |
-| `proforma_path` | string, nullable | Generated proforma PDF. |
+| `proforma_path` | string, nullable | Reserved for archiving issued proformas. Stays null: the PDF is generated on request from the order itself, so there is no file to point at. |
 | `date_created` / `date_updated` | timestamp | |
 
 ## `order_items`

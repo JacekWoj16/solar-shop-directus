@@ -60,7 +60,7 @@ _Coming as the storefront is built out._
 | **Partial prerendering** | A B2B catalogue changes slowly: prices weekly, stock daily. Pages are prerendered and revalidated on a timer, so the CMS stays out of the request path — and where one part of a page varies (a sorted, paged table), only that part is dynamic while the rest is still served as static HTML. |
 | **Zustand + localStorage** | Orders are placed without registration, so a server cart would add a session store, a merge strategy and a cleanup job while buying nothing. |
 | **Tailwind CSS v4** | Design tokens declared once in CSS under `@theme`, named semantically. A palette change is a one-file edit. |
-| **@react-pdf/renderer** | Proforma generation in a route handler, with the layout expressed as components rather than imperative drawing calls. |
+| **@react-pdf/renderer** | Proforma generation in a route handler, with the layout expressed as components rather than imperative drawing calls. Fonts are embedded — the PDF built-ins have no Polish diacritics. |
 | **PostgreSQL 16** | Directus manages its own schema; Postgres handles the relational load. |
 
 ### Rendering strategy

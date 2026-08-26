@@ -52,6 +52,13 @@ const nextConfig: NextConfig = {
   // client graph.
   serverExternalPackages: ['@react-pdf/renderer'],
 
+  // The proforma embeds .ttf files read from disk at request time. Nothing
+  // imports them, so output tracing cannot infer the dependency, and without
+  // this the route works locally and 500s once deployed.
+  outputFileTracingIncludes: {
+    '/api/proforma/[orderId]': ['./src/assets/fonts/**'],
+  },
+
   // Type errors must fail the build; Next 16 dropped the `eslint` block, so
   // linting runs as its own `npm run lint` step.
   typescript: { ignoreBuildErrors: false },
