@@ -151,6 +151,31 @@ Two further details worth knowing about the SDK:
   price depends on the buyer's quantity, so "cheapest first" is not a property
   of a row that SQL can order by; price sorts are applied after tier resolution.
 
+## Search
+
+The only catalogue surface never prerendered, and structurally so: the query
+space is unbounded, so there is no finite set of pages to generate ahead of
+time. The heading and search box are static; everything downstream of `?q=`
+streams in.
+
+It is also the only catalogue read that is **deliberately uncached**.
+`searchProducts` and `getSearchFacets` share their implementation with the
+cached category queries but skip `use cache`, because every distinct string a
+visitor types would otherwise become its own cache entry, evicting entries that
+are actually reused. The read behind it is cheap and the page is rendered per
+request anyway.
+
+Matching is a case-insensitive `contains` across name, SKU, brand and
+description — enough that a buyer can paste a SKU, half a SKU, or a
+manufacturer. Results render in the **same `ProductTable`** the category pages
+use, so a product found by typing its SKU can be given a quantity and added to
+the cart without first navigating into its category.
+
+Because a query legitimately spans the catalogue, results carry a category
+facet with counts, computed over the *unfiltered* match set so the chips keep
+showing every category the query reaches. It hides itself when the matches sit
+in a single category — a facet with one option filters nothing.
+
 ## Filtering
 
 Filter state lives in the URL, never in component state. A filtered table is

@@ -268,12 +268,33 @@ function buildFilter(query: ProductQuery): Record<string, unknown> {
   return { _and: conditions };
 }
 
-/** A page of products, with the total needed to render pagination. */
+/**
+ * A page of products, cached on the `catalogue` profile.
+ *
+ * For category browsing, where the set of queries is small and bounded by the
+ * category list and its facets. Search uses `searchProducts` instead.
+ */
 export async function getProducts(query: ProductQuery = {}): Promise<ProductPage> {
   'use cache';
   cacheLife('catalogue');
   cacheTag('products');
 
+  return fetchProducts(query);
+}
+
+/**
+ * The same query, deliberately uncached.
+ *
+ * Free-text search has an unbounded query space: every distinct string a
+ * visitor types would become its own cache entry, evicting entries that are
+ * actually reused. The catalogue read behind it is cheap, and the page is
+ * server-rendered per request anyway.
+ */
+export async function searchProducts(query: ProductQuery): Promise<ProductPage> {
+  return fetchProducts(query);
+}
+
+async function fetchProducts(query: ProductQuery = {}): Promise<ProductPage> {
   const pageSize = query.pageSize ?? PRODUCTS_PER_PAGE;
   const page = Math.max(1, query.page ?? 1);
   const filter = buildFilter(query);
@@ -418,6 +439,15 @@ export async function getCategoryFacets(
   cacheLife('catalogue');
   cacheTag('products');
 
+  return fetchFacets({ categorySlug });
+}
+
+/** Facets over a search result set. Uncached, for the same reason as above. */
+export async function getSearchFacets(search: string): Promise<CategoryFacets> {
+  return fetchFacets({ search });
+}
+
+async function fetchFacets(query: ProductQuery): Promise<CategoryFacets> {
   // Reuses the standard product shape and normaliser rather than a leaner
   // projection: the query is cached, a category is at most a few dozen rows,
   // and reading facets off normalised products means prices here are parsed by
@@ -426,7 +456,7 @@ export async function getCategoryFacets(
     readItems('products', {
       fields: [...PRODUCT_FIELDS],
       deep: TIER_DEEP,
-      filter: buildFilter({ categorySlug }),
+      filter: buildFilter(query),
       sort: ['brand'],
       limit: -1,
     }),
@@ -435,12 +465,22 @@ export async function getCategoryFacets(
   const products = (data as Record<string, unknown>[]).map(normalizeProduct);
 
   const brandCounts = new Map<string, number>();
+  // Which categories the matches fall into, and how many in each. Only useful
+  // for search, where results span the catalogue.
+  const categoryCounts = new Map<string, { name: string; count: number }>();
   const wattages: number[] = [];
   const prices: number[] = [];
 
   for (const product of products) {
     if (product.brand) {
       brandCounts.set(product.brand, (brandCounts.get(product.brand) ?? 0) + 1);
+    }
+    if (product.category?.slug) {
+      const entry = categoryCounts.get(product.category.slug);
+      categoryCounts.set(product.category.slug, {
+        name: product.category.name,
+        count: (entry?.count ?? 0) + 1,
+      });
     }
     if (product.power_watts !== null) wattages.push(product.power_watts);
 
@@ -452,6 +492,11 @@ export async function getCategoryFacets(
     brands: [...brandCounts.entries()]
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => a.name.localeCompare(b.name)),
+    categories: [...categoryCounts.entries()]
+      .map(([slug, { name, count }]) => ({ slug, name, count }))
+      // Most matches first: the category a searcher wants is usually the one
+      // with the most hits.
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
     powerBands: wattages.length
       ? buildPowerBands(Math.min(...wattages), Math.max(...wattages))
       : [],

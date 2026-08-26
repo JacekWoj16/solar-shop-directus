@@ -180,7 +180,6 @@ Built in stages; this section tracks where it is.
 - [ ] Cart with tier nudges
 - [ ] Checkout, NIP validation, order creation
 - [ ] Proforma PDF generation
-- [ ] Screenshots
 
 ## Notes
 

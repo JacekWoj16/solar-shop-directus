@@ -129,8 +129,13 @@ export interface ProductFilters {
 
 /** The values a category actually offers, used to build the filter controls. */
 export interface CategoryFacets {
-  /** Brands present in the category, with how many products each has. */
+  /** Brands present in the result set, with how many products each has. */
   brands: Array<{ name: string; count: number }>;
+  /**
+   * Which categories the results fall into. Meaningful for search, where
+   * matches span the catalogue; a single entry when browsing one category.
+   */
+  categories: Array<{ slug: string; name: string; count: number }>;
   /** Wattage bands covering the category's range; empty when none apply. */
   powerBands: PowerBand[];
   /** Entry-tier price bounds across the category, in PLN. */
