@@ -135,7 +135,7 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Product table
+ * Reflowing data tables (product table, cart)
  *
  * Below the `md` breakpoint each row reflows into a card. This is done in CSS
  * on a single markup tree rather than by rendering a table and a card list side
@@ -147,20 +147,20 @@
  * ------------------------------------------------------------------------- */
 
 @media (width < 48rem) {
-  .product-table,
-  .product-table thead,
-  .product-table tbody,
-  .product-table tr,
-  .product-table td {
+  .reflow-table,
+  .reflow-table thead,
+  .reflow-table tbody,
+  .reflow-table tr,
+  .reflow-table td {
     display: block;
   }
 
   /* Column headers are replaced by per-cell labels below. */
-  .product-table thead {
+  .reflow-table thead {
     display: none;
   }
 
-  .product-table tr {
+  .reflow-table tr {
     margin-bottom: 0.75rem;
     border: 1px solid var(--color-line);
     border-radius: var(--radius-lg);
@@ -168,7 +168,7 @@
     padding: 0.875rem 1rem;
   }
 
-  .product-table td {
+  .reflow-table td {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -179,7 +179,7 @@
   }
 
   /* The label a cell loses when its column header is hidden. */
-  .product-table td[data-label]:not([data-label=''])::before {
+  .reflow-table td[data-label]:not([data-label=''])::before {
     content: attr(data-label);
     flex-shrink: 0;
     color: var(--color-ink-muted);
@@ -189,14 +189,14 @@
   }
 
   /* The product cell is the card's header: full width, no label, no split. */
-  .product-table td[data-label='Product'] {
+  .reflow-table td[data-label='Product'] {
     display: block;
     padding-block-start: 0;
     text-align: left;
   }
 
   /* The volume-pricing sub-row is a panel, not a labelled field. */
-  .product-table td[colspan] {
+  .reflow-table td[colspan] {
     display: block;
     text-align: left;
   }

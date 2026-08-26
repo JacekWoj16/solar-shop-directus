@@ -65,7 +65,8 @@ _Coming as the storefront is built out._
 | `/` | Fully prerendered, 1 hour |
 | `/products/[category]` | Static shell prerendered per category; the table streams in, 30 minutes |
 | `/search` | Dynamic — the query space is unbounded |
-| `/cart`, `/checkout` | Client-side, `localStorage` |
+| `/cart` | Prerendered shell with a client island; cart state in `localStorage` |
+| `/checkout` | Client-side, `localStorage` |
 | `/order/[orderId]` | Dynamic, uncached |
 
 Caching is declared on the queries themselves rather than on route segments:
@@ -168,6 +169,7 @@ Built in stages; this section tracks where it is.
 - [x] Product table with live tiered pricing and quantity rules
 - [x] Category pages with sorting and pagination
 - [x] Product filters — brand, wattage bands, price range, in-stock
+- [x] Cart with live tier repricing and volume nudges
 - [ ] Search
 - [ ] Cart with tier nudges
 - [ ] Checkout, NIP validation, order creation

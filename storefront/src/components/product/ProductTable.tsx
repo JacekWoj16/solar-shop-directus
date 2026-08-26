@@ -29,7 +29,7 @@ export function ProductTable({ products }: { products: Product[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table role="table" className="product-table w-full border-collapse text-left">
+      <table role="table" className="reflow-table w-full border-collapse text-left">
         <thead role="rowgroup">
           <tr role="row" className="border-b border-line-strong bg-table-head text-xs uppercase tracking-wider text-ink-muted">
             <th role="columnheader" scope="col" className="py-2.5 pr-4 font-medium">

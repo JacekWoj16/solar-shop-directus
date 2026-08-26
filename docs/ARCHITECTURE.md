@@ -190,7 +190,15 @@ whenever the product is added again.
 
 Hydration is handled explicitly: the store exposes `hasHydrated`, and selectors
 report an empty cart until `localStorage` has been read. Rendering persisted
-state during the first client pass would desynchronise it from the server markup.
+state during the first client pass would desynchronise it from the server
+markup. The cart page shows a skeleton for that frame or two rather than
+flashing "your cart is empty" at someone whose cart is not empty.
+
+This is also why `/cart` is a *prerendered* page containing a client island:
+the heading and the category links offered to an empty cart are identical for
+everyone, and nothing on the route varies per request. The cart badge in the
+header follows the same rule, which is why it renders as absent — not as zero —
+in server HTML.
 
 ## Quantity rules
 
@@ -245,6 +253,12 @@ The suite covers the domain layer, which is where the money is:
   mixed-category carts, add/update/remove semantics, immutability.
 - `tests/nip.test.ts` — the modulo-11 checksum, including the remainder-of-10
   case that no issued NIP can carry.
+- `tests/filters.test.ts` — URL round-tripping, and that a mangled URL degrades
+  into a usable page instead of throwing.
+- `tests/cart.store.test.ts` — the one suite that needs a DOM (jsdom), covering
+  what only exists once a store and a browser are involved: persistence to
+  `localStorage`, the hydration flag the UI keys off, and quantities being
+  re-normalised on write rather than trusted from whatever was stored last time.
 
 Tests live at the repository root rather than inside `storefront/` because they
 exercise the domain layer as a unit, independent of the framework hosting it.
