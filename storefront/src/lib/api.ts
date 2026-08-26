@@ -1,10 +1,12 @@
 import { aggregate, readItems } from '@directus/sdk';
+import { cacheLife, cacheTag } from 'next/cache';
 
 import type { Page } from '@/types/page';
 import type { Category, Product, ProductSort } from '@/types/product';
 
 import { directusClient } from './directus';
 import { PRODUCTS_PER_PAGE } from './constants';
+import { getEntryPrice } from './pricing';
 
 /**
  * Typed catalogue queries.
@@ -19,6 +21,11 @@ import { PRODUCTS_PER_PAGE } from './constants';
  *
  * Everything crossing this boundary is therefore normalised once, here, and the
  * domain layer only ever sees real numbers.
+ *
+ * Caching is declared here too, per query, with `use cache`. What gets cached
+ * is the normalised result rather than the raw HTTP response, so the parsing is
+ * cached along with the data. Order-time reads are deliberately left uncached:
+ * a price used to bill someone must be current, not merely recent.
  */
 
 /**
@@ -150,8 +157,12 @@ function sortExpression(sort: ProductSort): SortField[] {
  * ---------------------------------------------------------------------- */
 
 /** Active categories in menu order. */
-export async function getCategories(revalidate?: number): Promise<Category[]> {
-  const data = await directusClient(revalidate).request(
+export async function getCategories(): Promise<Category[]> {
+  'use cache';
+  cacheLife('structure');
+  cacheTag('categories');
+
+  const data = await directusClient().request(
     readItems('categories', {
       fields: [...CATEGORY_FIELDS],
       filter: { is_active: { _eq: true } },
@@ -163,11 +174,12 @@ export async function getCategories(revalidate?: number): Promise<Category[]> {
   return (data as Record<string, unknown>[]).map(normalizeCategory);
 }
 
-export async function getCategoryBySlug(
-  slug: string,
-  revalidate?: number,
-): Promise<Category | null> {
-  const data = await directusClient(revalidate).request(
+export async function getCategoryBySlug(slug: string): Promise<Category | null> {
+  'use cache';
+  cacheLife('structure');
+  cacheTag('categories', `category:${slug}`);
+
+  const data = await directusClient().request(
     readItems('categories', {
       fields: [...CATEGORY_FIELDS],
       filter: { slug: { _eq: slug }, is_active: { _eq: true } },
@@ -198,7 +210,6 @@ export interface ProductQuery {
   sort?: ProductSort;
   page?: number;
   pageSize?: number;
-  revalidate?: number;
 }
 
 /** Builds the Directus filter for a product query. */
@@ -241,10 +252,19 @@ function buildFilter(query: ProductQuery): Record<string, unknown> {
 
 /** A page of products, with the total needed to render pagination. */
 export async function getProducts(query: ProductQuery = {}): Promise<ProductPage> {
+  'use cache';
+  cacheLife('catalogue');
+  cacheTag('products');
+
   const pageSize = query.pageSize ?? PRODUCTS_PER_PAGE;
   const page = Math.max(1, query.page ?? 1);
   const filter = buildFilter(query);
-  const client = directusClient(query.revalidate);
+  const client = directusClient();
+
+  const sort = query.sort ?? 'name_asc';
+  if (sort === 'price_asc' || sort === 'price_desc') {
+    return getProductsByPrice({ ...query, sort, page, pageSize }, filter);
+  }
 
   const [data, countResult] = await Promise.all([
     client.request(
@@ -252,7 +272,7 @@ export async function getProducts(query: ProductQuery = {}): Promise<ProductPage
         fields: [...PRODUCT_FIELDS],
         deep: TIER_DEEP,
         filter,
-        sort: sortExpression(query.sort ?? 'name_asc'),
+        sort: sortExpression(sort),
         limit: pageSize,
         page,
       }),
@@ -275,12 +295,65 @@ export async function getProducts(query: ProductQuery = {}): Promise<ProductPage
   };
 }
 
+/**
+ * Price-sorted page.
+ *
+ * Sorting by price cannot be pushed into SQL: the price a buyer sees depends on
+ * the quantity they choose, so "cheapest first" is not a property of a row.
+ * Ordering is therefore done on the entry-bracket price after tier resolution,
+ * which means fetching the whole filtered set and paginating in memory.
+ *
+ * That is fine at this catalogue's size (the largest category is under thirty
+ * products) and is bounded by the filter. A catalogue with thousands of SKUs per
+ * category would want a denormalised `entry_price` column on `products`,
+ * maintained by a Directus flow, so the sort could go back into the database.
+ */
+async function getProductsByPrice(
+  query: ProductQuery & { sort: 'price_asc' | 'price_desc'; page: number; pageSize: number },
+  filter: Record<string, unknown>,
+): Promise<ProductPage> {
+  const data = await directusClient().request(
+    readItems('products', {
+      fields: [...PRODUCT_FIELDS],
+      deep: TIER_DEEP,
+      sort: ['name'],
+      limit: -1,
+      filter,
+    }),
+  );
+
+  const products = (data as Record<string, unknown>[]).map(normalizeProduct);
+  const direction = query.sort === 'price_asc' ? 1 : -1;
+
+  products.sort((a, b) => {
+    // Products without tiers are quoted on request; they sort last either way
+    // rather than pretending to cost nothing.
+    const priceA = getEntryPrice(a.price_tiers);
+    const priceB = getEntryPrice(b.price_tiers);
+    if (priceA === null && priceB === null) return a.name.localeCompare(b.name);
+    if (priceA === null) return 1;
+    if (priceB === null) return -1;
+    return (priceA - priceB) * direction || a.name.localeCompare(b.name);
+  });
+
+  const total = products.length;
+  const start = (query.page - 1) * query.pageSize;
+
+  return {
+    products: products.slice(start, start + query.pageSize),
+    total,
+    page: query.page,
+    pageCount: Math.max(1, Math.ceil(total / query.pageSize)),
+  };
+}
+
 /** Distinct brands present in a category, for the filter facet. */
-export async function getBrands(
-  categorySlug?: string,
-  revalidate?: number,
-): Promise<string[]> {
-  const data = await directusClient(revalidate).request(
+export async function getBrands(categorySlug?: string): Promise<string[]> {
+  'use cache';
+  cacheLife('catalogue');
+  cacheTag('products');
+
+  const data = await directusClient().request(
     readItems('products', {
       fields: ['brand'],
       filter: buildFilter({ categorySlug }),
@@ -296,11 +369,12 @@ export async function getBrands(
   return [...new Set(brands)];
 }
 
-export async function getProductBySku(
-  sku: string,
-  revalidate?: number,
-): Promise<Product | null> {
-  const data = await directusClient(revalidate).request(
+export async function getProductBySku(sku: string): Promise<Product | null> {
+  'use cache';
+  cacheLife('catalogue');
+  cacheTag('products', `product:${sku}`);
+
+  const data = await directusClient().request(
     readItems('products', {
       fields: [...PRODUCT_FIELDS],
       deep: TIER_DEEP,
@@ -313,14 +387,17 @@ export async function getProductBySku(
   return product ? normalizeProduct(product) : null;
 }
 
-/** Products by id, used by the order route to re-price a submitted cart. */
-export async function getProductsByIds(
-  ids: string[],
-  revalidate = 0,
-): Promise<Product[]> {
+/**
+ * Products by id, used by the order route to re-price a submitted cart.
+ *
+ * Deliberately **not** cached: this is the read that decides what a buyer is
+ * charged, and it must see the current price list rather than one that was
+ * accurate half an hour ago.
+ */
+export async function getProductsByIds(ids: string[]): Promise<Product[]> {
   if (ids.length === 0) return [];
 
-  const data = await directusClient(revalidate).request(
+  const data = await directusClient().request(
     readItems('products', {
       fields: [...PRODUCT_FIELDS],
       deep: TIER_DEEP,
@@ -332,11 +409,12 @@ export async function getProductsByIds(
   return (data as Record<string, unknown>[]).map(normalizeProduct);
 }
 
-export async function getPage(
-  slug: string,
-  revalidate?: number,
-): Promise<Page | null> {
-  const data = await directusClient(revalidate).request(
+export async function getPage(slug: string): Promise<Page | null> {
+  'use cache';
+  cacheLife('structure');
+  cacheTag('pages', `page:${slug}`);
+
+  const data = await directusClient().request(
     readItems('pages', {
       fields: [...PAGE_FIELDS],
       filter: { slug: { _eq: slug }, status: { _eq: 'published' } },

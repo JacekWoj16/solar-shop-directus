@@ -47,7 +47,7 @@ _Coming as the storefront is built out._
 |---|---|
 | **Directus 11** | Database-first headless CMS: it derives REST and GraphQL from the SQL schema, which suits deeply relational product data (a product owns its price brackets) better than a document CMS. The admin panel manages products, tiers and orders out of the box. Third headless CMS in my portfolio, after Strapi and Payload. |
 | **Next.js 16, App Router** | Server components for the catalogue, client components only where interaction demands it, and a rendering strategy per route — see below. |
-| **ISR** | A B2B catalogue changes slowly: prices weekly, stock daily. Static generation with periodic revalidation gives static performance while keeping the CMS out of the request path. Search stays dynamic; the cart never touches the server. |
+| **Partial prerendering** | A B2B catalogue changes slowly: prices weekly, stock daily. Pages are prerendered and revalidated on a timer, so the CMS stays out of the request path — and where one part of a page varies (a sorted, paged table), only that part is dynamic while the rest is still served as static HTML. |
 | **Zustand + localStorage** | Orders are placed without registration, so a server cart would add a session store, a merge strategy and a cleanup job while buying nothing. |
 | **Tailwind CSS v4** | Design tokens declared once in CSS under `@theme`, named semantically. A palette change is a one-file edit. |
 | **@react-pdf/renderer** | Proforma generation in a route handler, with the layout expressed as components rather than imperative drawing calls. |
@@ -57,13 +57,16 @@ _Coming as the storefront is built out._
 
 | Route | Strategy |
 |---|---|
-| `/` | ISR, 1 hour |
-| `/products/[category]` | ISR, 30 minutes, pre-rendered per category |
+| `/` | Fully prerendered, 1 hour |
+| `/products/[category]` | Static shell prerendered per category; the table streams in, 30 minutes |
 | `/search` | Dynamic — the query space is unbounded |
 | `/cart`, `/checkout` | Client-side, `localStorage` |
 | `/order/[orderId]` | Dynamic, uncached |
 
-Full reasoning in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Caching is declared on the queries themselves rather than on route segments:
+everything is dynamic unless it opts in, and the read that decides what a buyer
+is charged never opts in. Full reasoning in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Getting started
 
@@ -156,8 +159,10 @@ Built in stages; this section tracks where it is.
 - [x] Architecture, tooling, design tokens, domain layer with tests
 - [x] Directus schema snapshot, seed data and access configuration
 - [x] Typed catalogue API with tier-aware queries
-- [ ] Product table with tiered pricing and quantity rules
-- [ ] Category pages, filtering, sorting, pagination
+- [x] Site header, category mega-menu, search box, cart badge
+- [x] Product table with live tiered pricing and quantity rules
+- [x] Category pages with sorting and pagination
+- [ ] Product filters (brand, power, price, in-stock)
 - [ ] Search
 - [ ] Cart with tier nudges
 - [ ] Checkout, NIP validation, order creation

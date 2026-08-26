@@ -1,13 +1,13 @@
 import { getCategories } from '@/lib/api';
 import { CategoryGrid } from '@/components/home/CategoryGrid';
 
-// Route segment config must be a literal: Next evaluates it statically at build
-// time and cannot resolve an imported constant. See docs/ARCHITECTURE.md for
-// the full rendering strategy.
-export const revalidate = 3600; // 1 hour
-
+/**
+ * Fully prerendered: every piece of data on this page is cacheable, so there is
+ * no dynamic hole for Next to stream into. Its lifetime comes from the
+ * `structure` profile on `getCategories`, not from a route segment export.
+ */
 export default async function HomePage() {
-  const categories = await getCategories(3600);
+  const categories = await getCategories();
 
   return (
     <div className="shell py-14">

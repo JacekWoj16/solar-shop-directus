@@ -13,14 +13,14 @@ import { SearchBar } from './SearchBar';
  * page already caches, so fetching it here costs nothing extra and keeps the
  * menu out of the client bundle apart from its open/close state.
  *
- * The one-hour window is deliberate, and it is the header's window that matters
- * most: **Next takes the shortest revalidate of every fetch on a page**, so a
- * 30-minute fetch here would silently drag the whole site — home page included —
- * down to 30 minutes. The set of categories is the shop's structure and changes
- * far more slowly than its stock.
+ * `getCategories` carries the longer `structure` cache profile: the set of
+ * categories is the shop's shape and changes far more slowly than its stock.
+ * That matters more here than anywhere else, because the header renders on
+ * every page — a short lifetime on this one query would keep the whole site
+ * revalidating for data that had not moved.
  */
 export async function Header() {
-  const categories = await getCategories(3600);
+  const categories = await getCategories();
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">

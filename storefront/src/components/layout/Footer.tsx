@@ -1,9 +1,23 @@
 import Link from 'next/link';
+import { cacheLife } from 'next/cache';
 
 import { BANK, PAYMENT_TERM_DAYS, SELLER } from '@/lib/constants';
 import { formatNip } from '@/lib/nip';
 
-export function Footer() {
+/**
+ * Reading the clock is dynamic, and a copyright year in a prerendered footer
+ * would otherwise force every page on the site to render per request. Caching
+ * it for a day keeps the footer static and still rolls the year over on time.
+ */
+async function currentYear(): Promise<number> {
+  'use cache';
+  cacheLife('days');
+  return new Date().getFullYear();
+}
+
+export async function Footer() {
+  const year = await currentYear();
+
   return (
     <footer className="mt-16 bg-footer text-ink-inverse">
       <div className="shell grid grid-cols-1 gap-8 py-12 sm:grid-cols-2 lg:grid-cols-4">
@@ -63,7 +77,9 @@ export function Footer() {
 
       <div className="border-t border-stone-800">
         <div className="shell flex flex-col gap-1 py-5 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} {SELLER.name}. All prices net of VAT.</p>
+          <p>
+            © {year} {SELLER.name}. All prices net of VAT.
+          </p>
           <p>A portfolio project. The company is fictional and nothing is for sale.</p>
         </div>
       </div>

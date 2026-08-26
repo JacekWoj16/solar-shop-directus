@@ -133,3 +133,71 @@
   appearance: textfield;
   -moz-appearance: textfield;
 }
+
+/* ---------------------------------------------------------------------------
+ * Product table
+ *
+ * Below the `md` breakpoint each row reflows into a card. This is done in CSS
+ * on a single markup tree rather than by rendering a table and a card list side
+ * by side: two trees would mean two copies of every row's quantity state, and
+ * they would disagree the moment the viewport crossed the breakpoint.
+ *
+ * Switching `display` strips a table's implicit ARIA semantics, so the markup
+ * carries explicit `role` attributes to put them back.
+ * ------------------------------------------------------------------------- */
+
+@media (width < 48rem) {
+  .product-table,
+  .product-table thead,
+  .product-table tbody,
+  .product-table tr,
+  .product-table td {
+    display: block;
+  }
+
+  /* Column headers are replaced by per-cell labels below. */
+  .product-table thead {
+    display: none;
+  }
+
+  .product-table tr {
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    background-color: var(--color-surface);
+    padding: 0.875rem 1rem;
+  }
+
+  .product-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block: 0.4375rem;
+    padding-inline: 0;
+    text-align: right;
+  }
+
+  /* The label a cell loses when its column header is hidden. */
+  .product-table td[data-label]:not([data-label=''])::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    color: var(--color-ink-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-align: left;
+  }
+
+  /* The product cell is the card's header: full width, no label, no split. */
+  .product-table td[data-label='Product'] {
+    display: block;
+    padding-block-start: 0;
+    text-align: left;
+  }
+
+  /* The volume-pricing sub-row is a panel, not a labelled field. */
+  .product-table td[colspan] {
+    display: block;
+    text-align: left;
+  }
+}

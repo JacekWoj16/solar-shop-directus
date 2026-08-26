@@ -48,29 +48,44 @@ in milliseconds with no DOM, no store and no network.
 A B2B catalogue is an unusually good fit for static generation: list prices are
 renegotiated weekly, stock moves daily, and nobody refreshes a product table
 hoping the price changed. Interaction, meanwhile, is entirely local — quantity
-inputs and the cart never need the server. That splits the app cleanly:
+inputs and the cart never need the server.
 
-| Route | Strategy | Window | Reasoning |
-|---|---|---|---|
-| `/` | ISR | 1 h | Hero copy and category tiles; effectively static. |
-| `/products/[category]` | ISR + `generateStaticParams` | 30 min | The main cached surface. Categories are known at build time, so every table is pre-rendered. |
-| `/search` | Dynamic | — | The query space is unbounded; there is nothing to pre-render. |
-| `/cart`, `/checkout` | Client | — | State lives in `localStorage`; no server round-trip is involved. |
-| `/order/[orderId]` | Dynamic, uncached | — | Per-order data that must never be served from a shared cache. |
-| `/about`, `/contact`, `/terms` | ISR | 1 h | Editorial content from Directus. |
-| `/api/orders`, `/api/proforma/[orderId]` | Route handlers | — | Writes and PDF generation; server-only. |
+The storefront runs with Next 16's `cacheComponents`, which changes where
+caching is declared. There is no `export const revalidate` on any route.
+Instead **everything is dynamic unless a query marks itself cacheable** with
+`use cache`, and each cached query names how long its data stays good:
 
-Two consequences worth knowing:
+| Profile | Window | Used for |
+|---|---|---|
+| `structure` | 1 hour | Categories and editorial pages — the shape of the shop |
+| `catalogue` | 30 minutes | Products and price tiers |
 
-- **`export const revalidate` must be a literal.** Next evaluates route segment
-  config statically at build time and will not resolve an imported constant —
-  it fails the build with "Invalid segment configuration export detected".
-  Each page therefore declares its own literal with a comment; this table is the
-  shared reference.
-- **The ISR window is only honoured if the fetch participates in it.** The
-  Directus SDK delegates to the platform `fetch`, so `directusClient(seconds)`
-  attaches `next: { revalidate }` to every request. Without that hint, page-level
-  revalidation would silently do nothing.
+That default is the right way round for a shop: a page is never accidentally
+stale, only deliberately so, and the one read that decides what a buyer is
+charged (`getProductsByIds`, used by the order route) is simply left uncached.
+
+The payoff is that a route no longer has to be entirely static or entirely
+dynamic:
+
+| Route | Strategy |
+|---|---|
+| `/` | Fully prerendered. Every query on it is cacheable. |
+| `/products/[category]` | **Partial prerender.** Breadcrumb, heading, description and ordering rules are prerendered per category at build time; the table depends on `?sort` and `?page`, so it streams into a `Suspense` boundary. |
+| `/search` | Dynamic — the query space is unbounded, there is nothing to prerender. |
+| `/cart`, `/checkout` | Client-side; state lives in `localStorage`. |
+| `/order/[orderId]` | Dynamic and uncached — per-order data must never be served from a shared cache. |
+| `/api/orders`, `/api/proforma/[orderId]` | Route handlers. |
+
+Two things this arrangement is quietly protecting against:
+
+- **A short cache window on a shared component poisons the whole site.** The
+  header renders on every page, so if its category query used the 30-minute
+  `catalogue` profile, every page — home included — would revalidate on that
+  schedule for data that had not moved. It uses `structure` instead.
+- **Reading the clock during a prerender is dynamic.** A `new Date()` in the
+  footer's copyright line was enough to make Next refuse to prerender any page
+  that renders the footer, which is all of them. It is now a day-lived cached
+  read, which keeps the footer static and still rolls the year over on time.
 
 ## Pricing
 

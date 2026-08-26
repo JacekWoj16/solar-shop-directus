@@ -47,26 +47,22 @@ export const DIRECTUS_PUBLIC_URL =
   process.env.NEXT_PUBLIC_DIRECTUS_URL ?? DIRECTUS_URL;
 
 /**
- * Read client for a given ISR window.
+ * Read client.
  *
- * The SDK delegates to the platform `fetch`, so attaching Next's `next.revalidate`
- * hint here is what lets a page's `revalidate` export actually govern how long
- * Directus responses are reused. Passing `0` opts a request out of caching
- * entirely — used by search, which cannot be pre-rendered.
+ * Deliberately uncached at the fetch layer. Caching is declared one level up,
+ * in `lib/api.ts`, where a `use cache` function caches its *result* — the
+ * normalised domain objects — rather than the raw HTTP response. That caches
+ * the parsing and normalisation too, and keeps one cache to reason about
+ * instead of two nested ones with different lifetimes.
  */
-export function directusClient(revalidate?: number) {
+export function directusClient() {
   return createDirectus<DirectusSchema>(DIRECTUS_URL).with(
     rest({
-      onRequest: (options) => ({
-        ...options,
-        cache: revalidate === 0 ? 'no-store' : 'force-cache',
-        next: revalidate === undefined ? undefined : { revalidate },
-      }),
+      onRequest: (options) => ({ ...options, cache: 'no-store' }),
     }),
   );
 }
 
-/** Default read client: cached, revalidation governed by the calling page. */
 export const directus = directusClient();
 
 /**
