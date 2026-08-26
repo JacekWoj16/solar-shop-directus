@@ -20,6 +20,11 @@ brackets (1–4, 5–99, 100–499, 500+). The unit price updates live in the ta
 and the cart, and when a buyer is a few units short of a cheaper bracket the
 cart says so: *"Add 2 more and pay 5% less per unit."*
 
+**Filters that fit the category.** Wattage bands are computed from the modules
+actually stocked, so no filter is offered that can only return nothing, and
+inverters get no power filter at all. Filter state lives in the URL, so a
+narrowed table is a link you can send to a colleague.
+
 **Quantity rules per category.** Panels ship on pallets of five, so the minimum
 is 5 and the step is 1. Cables are sold on 10-metre rolls. The rules live on the
 category and are enforced in the input, in the cart store and again in the order
@@ -162,7 +167,7 @@ Built in stages; this section tracks where it is.
 - [x] Site header, category mega-menu, search box, cart badge
 - [x] Product table with live tiered pricing and quantity rules
 - [x] Category pages with sorting and pagination
-- [ ] Product filters (brand, power, price, in-stock)
+- [x] Product filters — brand, wattage bands, price range, in-stock
 - [ ] Search
 - [ ] Cart with tier nudges
 - [ ] Checkout, NIP validation, order creation

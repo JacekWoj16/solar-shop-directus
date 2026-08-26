@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
-import { getCategories, getCategoryBySlug } from '@/lib/api';
+import { ProductFilters } from '@/components/product/ProductFilters';
+import { getCategories, getCategoryBySlug, getCategoryFacets } from '@/lib/api';
 import { VAT_RATE } from '@/lib/constants';
 import { formatNumber, formatPercent, formatQuantity } from '@/lib/format';
 
@@ -50,6 +51,11 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   const category = await getCategoryBySlug(slug);
   if (!category) notFound();
 
+  // Facets depend only on the category, so they belong to the prerendered
+  // shell: the filter controls are visible immediately, before the table that
+  // they act on has streamed in.
+  const facets = await getCategoryFacets(slug);
+
   return (
     <div className="shell py-8">
       <nav aria-label="Breadcrumb" className="text-sm text-ink-muted">
@@ -87,9 +93,38 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
         </div>
       </header>
 
-      <Suspense fallback={<ProductTableSkeleton />}>
-        <CategoryProducts slug={slug} searchParams={searchParams} />
-      </Suspense>
+      <div className="mt-6 grid grid-cols-1 gap-x-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-32 lg:self-start">
+          {/* The filter controls read the URL through `useSearchParams`, which
+              needs its own boundary so it cannot pull the shell into being
+              rendered per request. */}
+          <Suspense fallback={<FiltersSkeleton />}>
+            <ProductFilters facets={facets} />
+          </Suspense>
+        </aside>
+
+        <div className="min-w-0">
+          <Suspense fallback={<ProductTableSkeleton />}>
+            <CategoryProducts slug={slug} searchParams={searchParams} />
+          </Suspense>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FiltersSkeleton() {
+  return (
+    <div className="space-y-5">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index}>
+          <div className="h-3 w-20 animate-pulse rounded bg-surface-sunken" />
+          <div className="mt-2 space-y-1.5">
+            <div className="h-4 w-full animate-pulse rounded bg-surface-sunken" />
+            <div className="h-4 w-4/5 animate-pulse rounded bg-surface-sunken" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

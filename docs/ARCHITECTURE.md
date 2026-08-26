@@ -138,6 +138,44 @@ Two further details worth knowing about the SDK:
   price depends on the buyer's quantity, so "cheapest first" is not a property
   of a row that SQL can order by; price sorts are applied after tier resolution.
 
+## Filtering
+
+Filter state lives in the URL, never in component state. A filtered table is
+then a link: "the 600 W+ Trina modules you have in stock" can be bookmarked,
+sent to a colleague, or reloaded without losing it, and the back button behaves.
+`src/lib/filters.ts` is the only module that knows how that state is spelled,
+and it is pure, so parsing and serialising are tested without a router
+(`tests/filters.test.ts`).
+
+Three decisions worth stating:
+
+- **Facets are derived from the category, not hard-coded.** Wattage bands are
+  computed from the range actually present, so a category of 425–715 W modules
+  never offers a "200–250 W" filter that can only return nothing, and inverters
+  — which have no wattage — are offered no power filter at all. A range that
+  falls entirely within one band offers no bands either: a filter with a single
+  option filters nothing.
+- **Facets cover the whole category, not the filtered set.** Narrowing them as
+  filters are applied would let a buyer tick a box and then be unable to find it
+  again to untick it.
+- **Wattage bands are a union.** Ticking 400–450 and 600 W+ means "either", the
+  only reading that makes sense; the intersection is always empty.
+
+Parsing is deliberately forgiving. A hand-edited or truncated URL drops the
+parts it cannot understand and still renders a usable page — a malformed band is
+ignored rather than fatal, and a reversed price range is swapped rather than
+returning nothing, because it is a typo, not a request for zero results.
+
+Price is the awkward one. A product's price is not a column: it is whichever
+bracket the buyer's quantity lands in. So `price_min`/`price_max` cannot go into
+SQL — a `price_tiers.unit_price` filter would match any product with *some*
+bracket in range rather than one whose list price is — and neither can "cheapest
+first". Both are resolved against the entry bracket after the tiers are read,
+which means fetching the filtered set and paginating in memory. Every filter SQL
+*can* apply (brand, wattage, stock, category) still narrows that set first. At
+thousands of SKUs per category this would want a denormalised `entry_price`
+column maintained by a Directus flow, so both could go back into the database.
+
 ## Cart
 
 The cart is client-side only: Zustand with a `localStorage` persister, no server

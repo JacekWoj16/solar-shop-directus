@@ -2,10 +2,17 @@ import { aggregate, readItems } from '@directus/sdk';
 import { cacheLife, cacheTag } from 'next/cache';
 
 import type { Page } from '@/types/page';
-import type { Category, Product, ProductSort } from '@/types/product';
+import type {
+  CategoryFacets,
+  Category,
+  PowerBand,
+  Product,
+  ProductSort,
+} from '@/types/product';
 
 import { directusClient } from './directus';
 import { PRODUCTS_PER_PAGE } from './constants';
+import { buildPowerBands } from './filters';
 import { getEntryPrice } from './pricing';
 
 /**
@@ -204,8 +211,11 @@ export interface ProductQuery {
   /** Free-text search across name, SKU, description and brand. */
   search?: string;
   brands?: string[];
-  powerMin?: number | null;
-  powerMax?: number | null;
+  /** Wattage bands, combined as a union. */
+  power?: PowerBand[];
+  /** Bounds on the entry-tier unit price, applied after tier resolution. */
+  priceMin?: number | null;
+  priceMax?: number | null;
   inStockOnly?: boolean;
   sort?: ProductSort;
   page?: number;
@@ -236,11 +246,19 @@ function buildFilter(query: ProductQuery): Record<string, unknown> {
     conditions.push({ brand: { _in: query.brands } });
   }
 
-  if (query.powerMin != null) {
-    conditions.push({ power_watts: { _gte: query.powerMin } });
-  }
-  if (query.powerMax != null) {
-    conditions.push({ power_watts: { _lte: query.powerMax } });
+  // Wattage bands are a union: ticking two bands widens the result, it does
+  // not narrow it to their (empty) intersection.
+  if (query.power?.length) {
+    conditions.push({
+      _or: query.power.map((band) =>
+        band.max === null
+          ? { power_watts: { _gte: band.min } }
+          : { _and: [
+              { power_watts: { _gte: band.min } },
+              { power_watts: { _lt: band.max } },
+            ] },
+      ),
+    });
   }
 
   if (query.inStockOnly) {
@@ -262,7 +280,11 @@ export async function getProducts(query: ProductQuery = {}): Promise<ProductPage
   const client = directusClient();
 
   const sort = query.sort ?? 'name_asc';
-  if (sort === 'price_asc' || sort === 'price_desc') {
+
+  // Anything that depends on the resolved price — sorting by it or bounding it —
+  // has to be settled after the tiers are read, not in SQL. See below.
+  const priceBounded = query.priceMin != null || query.priceMax != null;
+  if (sort === 'price_asc' || sort === 'price_desc' || priceBounded) {
     return getProductsByPrice({ ...query, sort, page, pageSize }, filter);
   }
 
@@ -296,20 +318,49 @@ export async function getProducts(query: ProductQuery = {}): Promise<ProductPage
 }
 
 /**
- * Price-sorted page.
+ * Ordering for the in-memory path, matching what the database would have done
+ * for the non-price sorts so a price *filter* does not silently reorder a
+ * name-sorted table.
+ */
+function comparator(sort: ProductSort): (a: Product, b: Product) => number {
+  if (sort === 'sku_asc') return (a, b) => a.sku.localeCompare(b.sku);
+  if (sort === 'name_desc') return (a, b) => b.name.localeCompare(a.name);
+  if (sort !== 'price_asc' && sort !== 'price_desc') {
+    return (a, b) => a.name.localeCompare(b.name);
+  }
+
+  const direction = sort === 'price_asc' ? 1 : -1;
+
+  return (a, b) => {
+    // Quoted-on-request products have no price to rank; they sort last in both
+    // directions rather than pretending to cost nothing.
+    const priceA = getEntryPrice(a.price_tiers);
+    const priceB = getEntryPrice(b.price_tiers);
+    if (priceA === null && priceB === null) return a.name.localeCompare(b.name);
+    if (priceA === null) return 1;
+    if (priceB === null) return -1;
+    return (priceA - priceB) * direction || a.name.localeCompare(b.name);
+  };
+}
+
+/**
+ * Price-sorted and/or price-bounded page.
  *
- * Sorting by price cannot be pushed into SQL: the price a buyer sees depends on
- * the quantity they choose, so "cheapest first" is not a property of a row.
- * Ordering is therefore done on the entry-bracket price after tier resolution,
- * which means fetching the whole filtered set and paginating in memory.
+ * Neither can be pushed into SQL. A product's price is not a column: it is
+ * whichever bracket the buyer's quantity lands in, so "cheapest first" is not a
+ * property of a row, and "between 250 and 300 zł" would match any product with
+ * *some* bracket in that range rather than one whose list price is. Both are
+ * therefore resolved against the entry bracket after the tiers are read, which
+ * means fetching the whole filtered set and paginating in memory.
  *
  * That is fine at this catalogue's size (the largest category is under thirty
- * products) and is bounded by the filter. A catalogue with thousands of SKUs per
- * category would want a denormalised `entry_price` column on `products`,
- * maintained by a Directus flow, so the sort could go back into the database.
+ * products) and is still narrowed by every filter SQL *can* apply — brand,
+ * wattage, stock. A catalogue with thousands of SKUs per category would want a
+ * denormalised `entry_price` column on `products`, maintained by a Directus
+ * flow, so both could go back into the database.
  */
 async function getProductsByPrice(
-  query: ProductQuery & { sort: 'price_asc' | 'price_desc'; page: number; pageSize: number },
+  query: ProductQuery & { sort: ProductSort; page: number; pageSize: number },
   filter: Record<string, unknown>,
 ): Promise<ProductPage> {
   const data = await directusClient().request(
@@ -322,19 +373,21 @@ async function getProductsByPrice(
     }),
   );
 
-  const products = (data as Record<string, unknown>[]).map(normalizeProduct);
-  const direction = query.sort === 'price_asc' ? 1 : -1;
+  let products = (data as Record<string, unknown>[]).map(normalizeProduct);
 
-  products.sort((a, b) => {
-    // Products without tiers are quoted on request; they sort last either way
-    // rather than pretending to cost nothing.
-    const priceA = getEntryPrice(a.price_tiers);
-    const priceB = getEntryPrice(b.price_tiers);
-    if (priceA === null && priceB === null) return a.name.localeCompare(b.name);
-    if (priceA === null) return 1;
-    if (priceB === null) return -1;
-    return (priceA - priceB) * direction || a.name.localeCompare(b.name);
-  });
+  if (query.priceMin != null || query.priceMax != null) {
+    products = products.filter((product) => {
+      const price = getEntryPrice(product.price_tiers);
+      // Quoted-on-request products have no price to compare against, so a price
+      // filter necessarily excludes them.
+      if (price === null) return false;
+      if (query.priceMin != null && price < query.priceMin) return false;
+      if (query.priceMax != null && price > query.priceMax) return false;
+      return true;
+    });
+  }
+
+  products.sort(comparator(query.sort));
 
   const total = products.length;
   const start = (query.page - 1) * query.pageSize;
@@ -347,26 +400,64 @@ async function getProductsByPrice(
   };
 }
 
-/** Distinct brands present in a category, for the filter facet. */
-export async function getBrands(categorySlug?: string): Promise<string[]> {
+/**
+ * The filter options a category actually offers.
+ *
+ * Derived from the category's own products rather than hard-coded, so a
+ * category never presents a filter that can only return nothing — no "200–250 W"
+ * band in a range that starts at 425 W, no brand that stocks nothing here.
+ *
+ * Facets are computed over the *whole* category, not the currently filtered
+ * set. Narrowing them as filters are applied would let a buyer tick a box and
+ * then be unable to find it again to untick it.
+ */
+export async function getCategoryFacets(
+  categorySlug?: string,
+): Promise<CategoryFacets> {
   'use cache';
   cacheLife('catalogue');
   cacheTag('products');
 
+  // Reuses the standard product shape and normaliser rather than a leaner
+  // projection: the query is cached, a category is at most a few dozen rows,
+  // and reading facets off normalised products means prices here are parsed by
+  // exactly the same code that parses them for the table.
   const data = await directusClient().request(
     readItems('products', {
-      fields: ['brand'],
+      fields: [...PRODUCT_FIELDS],
+      deep: TIER_DEEP,
       filter: buildFilter({ categorySlug }),
       sort: ['brand'],
       limit: -1,
     }),
   );
 
-  const brands = (data as Array<{ brand?: string }>)
-    .map((row) => row.brand)
-    .filter((brand): brand is string => Boolean(brand));
+  const products = (data as Record<string, unknown>[]).map(normalizeProduct);
 
-  return [...new Set(brands)];
+  const brandCounts = new Map<string, number>();
+  const wattages: number[] = [];
+  const prices: number[] = [];
+
+  for (const product of products) {
+    if (product.brand) {
+      brandCounts.set(product.brand, (brandCounts.get(product.brand) ?? 0) + 1);
+    }
+    if (product.power_watts !== null) wattages.push(product.power_watts);
+
+    const entry = getEntryPrice(product.price_tiers);
+    if (entry !== null) prices.push(entry);
+  }
+
+  return {
+    brands: [...brandCounts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    powerBands: wattages.length
+      ? buildPowerBands(Math.min(...wattages), Math.max(...wattages))
+      : [],
+    priceMin: prices.length ? Math.floor(Math.min(...prices)) : null,
+    priceMax: prices.length ? Math.ceil(Math.max(...prices)) : null,
+  };
 }
 
 export async function getProductBySku(sku: string): Promise<Product | null> {

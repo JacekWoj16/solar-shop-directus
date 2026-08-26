@@ -3,6 +3,7 @@ import { ProductSort } from '@/components/product/ProductSort';
 import { ProductTable } from '@/components/product/ProductTable';
 import { getProducts } from '@/lib/api';
 import { PRODUCTS_PER_PAGE } from '@/lib/constants';
+import { parseFilters } from '@/lib/filters';
 import { formatNumber } from '@/lib/format';
 import type { ProductSort as SortOption } from '@/types/product';
 
@@ -37,11 +38,17 @@ export async function CategoryProducts({ slug, searchParams }: CategoryProductsP
 
   const sort = parseSort(query.sort);
   const page = Math.max(1, Number.parseInt(query.page ?? '1', 10) || 1);
+  const filters = parseFilters(query);
 
   const { products, total, pageCount } = await getProducts({
     categorySlug: slug,
     sort,
     page,
+    brands: filters.brands,
+    power: filters.power,
+    priceMin: filters.priceMin,
+    priceMax: filters.priceMax,
+    inStockOnly: filters.inStockOnly,
   });
 
   const firstOnPage = total === 0 ? 0 : (page - 1) * PRODUCTS_PER_PAGE + 1;
@@ -60,7 +67,7 @@ export async function CategoryProducts({ slug, searchParams }: CategoryProductsP
               of {formatNumber(total, 0)} products
             </>
           ) : (
-            'No products in this category yet.'
+            'No products match these filters.'
           )}
         </p>
 

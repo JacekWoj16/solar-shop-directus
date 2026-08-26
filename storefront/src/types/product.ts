@@ -103,14 +103,37 @@ export type ProductSort =
   | 'price_desc'
   | 'sku_asc';
 
+/**
+ * One wattage band offered as a filter checkbox, e.g. 400–450 W or 600 W+.
+ * `max` of `null` is the open-ended top band.
+ */
+export interface PowerBand {
+  min: number;
+  max: number | null;
+}
+
 /** Filter state for a category or search result page, mirrored in the URL. */
 export interface ProductFilters {
   brands: string[];
-  /** Inclusive wattage bounds, applied only to categories that expose power. */
-  powerMin: number | null;
-  powerMax: number | null;
+  /**
+   * Selected wattage bands, combined as a union — ticking 400–450 and 500–550
+   * means "either", not "both", which is the only reading that makes sense.
+   * Empty for categories whose products have no wattage.
+   */
+  power: PowerBand[];
   /** Bounds on the entry-tier net unit price, in PLN. */
   priceMin: number | null;
   priceMax: number | null;
   inStockOnly: boolean;
+}
+
+/** The values a category actually offers, used to build the filter controls. */
+export interface CategoryFacets {
+  /** Brands present in the category, with how many products each has. */
+  brands: Array<{ name: string; count: number }>;
+  /** Wattage bands covering the category's range; empty when none apply. */
+  powerBands: PowerBand[];
+  /** Entry-tier price bounds across the category, in PLN. */
+  priceMin: number | null;
+  priceMax: number | null;
 }
